@@ -8,7 +8,7 @@ WORKDIR /app
 # نسخ composer.json فقط
 COPY composer.json ./
 
-# تحديث وتثبيت مع تجاهل أوامر post-install
+# تثبيت المكتبات بدون dev لتسريع البناء
 RUN composer update --no-dev --prefer-dist --no-interaction --ignore-platform-reqs --no-scripts && \
     composer install --no-dev --prefer-dist --no-interaction --ignore-platform-reqs --no-scripts
 
@@ -17,7 +17,7 @@ RUN composer update --no-dev --prefer-dist --no-interaction --ignore-platform-re
 # ============================
 FROM php:8.2-fpm
 
-# تثبيت المكتبات المطلوبة
+# تثبيت المكتبات المطلوبة لتشغيل Laravel
 RUN apt-get update && apt-get install -y \
     nginx \
     git \
@@ -31,7 +31,9 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     libpq-dev \
     libicu-dev \
+    libonig-dev \
     g++ \
+    openssl \
     && docker-php-ext-configure gd --with-jpeg --with-webp \
     && docker-php-ext-install gd zip exif pdo pdo_pgsql intl mbstring bcmath opcache \
     && rm -rf /var/lib/apt/lists/*
@@ -45,7 +47,7 @@ COPY . .
 # نسخ مكتبات Composer من المرحلة الأولى
 COPY --from=vendor /app/vendor ./vendor
 
-# إنشاء المجلدات المطلوبة
+# إنشاء المجلدات المطلوبة بواسطة Laravel
 RUN mkdir -p storage/framework/{cache,sessions,views} \
     storage/logs \
     bootstrap/cache
@@ -63,11 +65,43 @@ RUN php artisan package:discover --ansi || true && \
 # نسخ إعدادات Nginx
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# حذف الإعداد الافتراضي
-RUN rm -f /etc/nginx/sites-enabled/default
+# حذف الإعداد الافتراضي إن وُجد
+RUN rm -f /etc/nginx/sites-enabled/default || true
 
-# فتح المنفذ
+# فتح المنافذ
 EXPOSE 80
+EXPOSE 443
+
+# ✅ إنشاء شهادة SSL ذاتية (تجريبية - في حال أردت HTTPS محليًا)
+RUN mkdir -p /etc/ssl/private /etc/ssl/certs && \
+    openssl req -x509 -nodes -days 365 \
+    -subj "/C=SA/ST=Makkah/L=Jeddah/O=AtmenAI/CN=atmenai.com" \
+    -addext "subjectAltName=DNS:atmenai.com" \
+    -newkey rsa:2048 \
+    -keyout /etc/ssl/private/nginx-selfsigned.key \
+    -out /etc/ssl/certs/nginx-selfsigned.crt
+
+# ✅ تعديل إعداد Nginx لدعم SSL
+RUN echo '\n\
+server {\n\
+    listen 443 ssl;\n\
+    ssl_certificate /etc/ssl/certs/nginx-selfsigned.crt;\n\
+    ssl_certificate_key /etc/ssl/private/nginx-selfsigned.key;\n\
+    server_name _;\n\
+    root /var/www/html/public;\n\
+    index index.php index.html;\n\
+\n\
+    location / {\n\
+        try_files $uri $uri/ /index.php?$query_string;\n\
+    }\n\
+\n\
+    location ~ \.php$ {\n\
+        include fastcgi_params;\n\
+        fastcgi_pass 127.0.0.1:9000;\n\
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\n\
+        fastcgi_index index.php;\n\
+    }\n\
+}\n' >> /etc/nginx/conf.d/default.conf
 
 # تشغيل Nginx و PHP-FPM
 CMD ["sh", "-c", "service nginx start && php-fpm"]
