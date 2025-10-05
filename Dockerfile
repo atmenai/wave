@@ -1,5 +1,6 @@
 ##############################################
 # 🧠 Dockerfile for Atmen AI (Laravel / Wave)
+# موقعه داخل مجلد wave/
 # PHP 8.2 + Composer + PostgreSQL + Coolify
 ##############################################
 
@@ -8,8 +9,8 @@ FROM composer:2 AS vendor
 
 WORKDIR /app
 
-# انسخ ملفات Laravel من المجلد الصحيح
-COPY wave/composer.json wave/composer.lock ./
+# انسخ ملفات Laravel من المجلد الحالي (wave/)
+COPY composer.json composer.lock ./
 RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
 
 # ---------- مرحلة التطبيق (PHP-FPM) ----------
@@ -22,8 +23,8 @@ RUN apk add --no-cache bash git curl zip unzip libpng-dev libjpeg-turbo-dev libw
 
 WORKDIR /var/www/html
 
-# نسخ كل ملفات المشروع (من المجلد الفرعي wave)
-COPY wave/ ./
+# نسخ كل ملفات المشروع (المجلد wave بكامله)
+COPY . .
 
 # نسخ vendor من مرحلة البناء
 COPY --from=vendor /app/vendor ./vendor
