@@ -1,42 +1,39 @@
-# ---------------------------
-# مرحلة 1: تثبيت الاعتمادات (Composer)
-# ---------------------------
+# ============================
+# 🧱 Stage 1: Build Composer deps
+# ============================
 FROM composer:2 AS vendor
 
 WORKDIR /app
-COPY composer.json ./
+COPY composer.json composer.lock ./
 RUN composer install --no-dev --prefer-dist --no-interaction --ignore-platform-reqs
 
-# ---------------------------
-# مرحلة 2: بيئة التشغيل PHP-FPM + Nginx
-# ---------------------------
-FROM php:8.2-fpm-alpine
+# ============================
+# 🚀 Stage 2: App (PHP + Nginx)
+# ============================
+FROM php:8.2-fpm
 
-# تثبيت الحزم المطلوبة
-RUN apk add --no-cache bash git curl nginx zip unzip \
-    libpng-dev libjpeg-turbo-dev libwebp-dev libzip-dev oniguruma-dev \
-    postgresql-dev icu-dev icu-libs libxml2-dev \
+# Install required libraries and extensions
+RUN apt-get update && apt-get install -y \
+    nginx git curl zip unzip libpng-dev libjpeg-dev libwebp-dev libzip-dev zlib1g-dev libpq-dev libicu-dev g++ \
     && docker-php-ext-configure gd --with-jpeg --with-webp \
-    && docker-php-ext-install pdo pdo_pgsql mbstring exif pcntl bcmath gd zip intl \
-    && rm -rf /var/cache/apk/*
+    && docker-php-ext-install gd zip exif pdo pdo_pgsql intl mbstring bcmath opcache \
+    && rm -rf /var/lib/apt/lists/*
 
-# إنشاء مجلد العمل
+# Copy application code
 WORKDIR /var/www/html
-
-# نسخ ملفات المشروع
 COPY . .
 
-# نسخ مكتبات vendor من المرحلة الأولى
+# Copy Composer dependencies from build stage
 COPY --from=vendor /app/vendor ./vendor
 
-# إعداد صلاحيات التخزين والتخزين المؤقت
-RUN chmod -R 775 storage bootstrap/cache
+# Set permissions
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
-# نسخ إعدادات nginx
+# Copy Nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# فتح المنافذ
+# Expose web port
 EXPOSE 80
 
-# تشغيل الخدمات (nginx + php-fpm)
-CMD ["sh", "-c", "php-fpm -D && nginx -g 'daemon off;'"]
+# Start Nginx and PHP-FPM together
+CMD service nginx start && php-fpm
