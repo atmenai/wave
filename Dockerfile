@@ -16,8 +16,8 @@ FROM node:20-alpine AS assets
 WORKDIR /app
 # نسخ package.json و package-lock.json
 COPY package*.json ./
-# تثبيت npm dependencies
-RUN npm ci --only=production
+# تثبيت npm dependencies (بما فيها dev dependencies للبناء)
+RUN npm install
 # نسخ الملفات المطلوبة للبناء
 COPY . .
 # بناء الأصول باستخدام Vite
