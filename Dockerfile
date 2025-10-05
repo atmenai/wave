@@ -8,30 +8,28 @@ FROM composer:2 AS vendor
 
 WORKDIR /app
 
-# تثبيت الامتدادات المطلوبة أثناء البناء
-RUN apt-get update && apt-get install -y \
-    libpng-dev libjpeg-dev libwebp-dev libzip-dev libicu-dev unzip git \
+# تثبيت الامتدادات المطلوبة في بيئة Alpine الخاصة بـ Composer
+RUN apk add --no-cache bash git curl zip unzip libpng-dev libjpeg-turbo-dev libwebp-dev libzip-dev icu-dev \
     && docker-php-ext-configure gd --with-jpeg --with-webp \
-    && docker-php-ext-install gd exif intl \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && docker-php-ext-install gd exif intl
 
 # نسخ ملفات Laravel
 COPY composer.json ./
 
-# تثبيت الاعتمادات بدون ملف composer.lock
-RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+# تثبيت الاعتمادات بدون composer.lock (تحديث آمن)
+RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader --ignore-platform-reqs
 
 # ---------- مرحلة التشغيل (PHP-FPM) ----------
 FROM php:8.2-fpm-alpine
 
-# تثبيت المكتبات المطلوبة للنظام
+# تثبيت مكتبات النظام والامتدادات المطلوبة للتطبيق
 RUN apk add --no-cache bash git curl zip unzip libpng-dev libjpeg-turbo-dev libwebp-dev libzip-dev oniguruma-dev postgresql-dev icu-dev \
     && docker-php-ext-configure gd --with-jpeg --with-webp \
     && docker-php-ext-install pdo pdo_pgsql mbstring exif pcntl bcmath gd zip intl
 
 WORKDIR /var/www/html
 
-# نسخ ملفات المشروع (wave/)
+# نسخ المشروع
 COPY . .
 
 # نسخ vendor من مرحلة البناء
@@ -43,3 +41,4 @@ RUN php artisan storage:link || true
 EXPOSE 9000
 
 CMD ["php-fpm"]
+
