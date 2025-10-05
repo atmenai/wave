@@ -1,10 +1,24 @@
-FROM composer:2 AS vendor
-WORKDIR /app
-COPY composer.json ./
-RUN composer install --no-dev --prefer-dist --no-interaction --ignore-platform-reqs
+###############################
+# Dockerfile for Atmen AI (Laravel / Wave)
+# PHP 8.2 + Composer + PostgreSQL + Coolify
+###############################
 
+# ---------- مرحلة البناء (Composer) ----------
+FROM composer:2 AS vendor
+
+WORKDIR /app
+
+# انسخ كل ملفات المشروع وليس فقط composer.json
+COPY . .
+
+# ثبّت الاعتمادات
+RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader --ignore-platform-reqs
+
+
+# ---------- مرحلة التشغيل (PHP-FPM) ----------
 FROM php:8.2-fpm-alpine
 
+# تثبيت الحزم المطلوبة
 RUN apk add --no-cache \
     bash git curl zip unzip \
     libpng-dev libjpeg-turbo-dev libwebp-dev libzip-dev oniguruma-dev \
@@ -15,11 +29,13 @@ RUN apk add --no-cache \
     && rm -rf /var/cache/apk/*
 
 WORKDIR /var/www/html
-COPY . .
 
-COPY --from=vendor /app/vendor ./vendor
+# نسخ الملفات من مرحلة البناء
+COPY --from=vendor /app ./
 
+# أذونات التخزين والـ cache
 RUN chmod -R 775 storage bootstrap/cache
 
 EXPOSE 9000
+
 CMD ["php-fpm"]
