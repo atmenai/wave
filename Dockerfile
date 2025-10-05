@@ -10,7 +10,7 @@ FROM composer:2 AS vendor
 WORKDIR /app
 
 # انسخ ملفات Laravel من المجلد الحالي (wave/)
-COPY composer.json composer.lock ./
+COPY composer.json ./
 RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
 
 # ---------- مرحلة التطبيق (PHP-FPM) ----------
@@ -35,3 +35,4 @@ RUN php artisan storage:link || true
 EXPOSE 9000
 
 CMD ["php-fpm"]
+
