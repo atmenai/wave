@@ -5,12 +5,12 @@ FROM composer:2 AS vendor
 
 WORKDIR /app
 
-# نسخ composer.json فقط أولاً
+# نسخ composer.json فقط
 COPY composer.json ./
 
-# تحديث وتثبيت المكتبات (سيُنشئ composer.lock تلقائياً)
-RUN composer update --no-dev --prefer-dist --no-interaction --ignore-platform-reqs && \
-    composer install --no-dev --prefer-dist --no-interaction --ignore-platform-reqs
+# تحديث وتثبيت مع تجاهل أوامر post-install
+RUN composer update --no-dev --prefer-dist --no-interaction --ignore-platform-reqs --no-scripts && \
+    composer install --no-dev --prefer-dist --no-interaction --ignore-platform-reqs --no-scripts
 
 # ============================
 # 🚀 Stage 2: App (PHP + Nginx)
@@ -45,10 +45,8 @@ COPY . .
 # نسخ مكتبات Composer من المرحلة الأولى
 COPY --from=vendor /app/vendor ./vendor
 
-# إنشاء المجلدات المطلوبة إذا لم تكن موجودة
-RUN mkdir -p storage/framework/cache \
-    storage/framework/sessions \
-    storage/framework/views \
+# إنشاء المجلدات المطلوبة
+RUN mkdir -p storage/framework/{cache,sessions,views} \
     storage/logs \
     bootstrap/cache
 
@@ -56,10 +54,16 @@ RUN mkdir -p storage/framework/cache \
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache && \
     chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
+# تشغيل أوامر Laravel بعد نسخ الكود
+RUN php artisan package:discover --ansi || true && \
+    php artisan config:cache || true && \
+    php artisan route:cache || true && \
+    php artisan view:cache || true
+
 # نسخ إعدادات Nginx
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# حذف الإعداد الافتراضي لـ Nginx
+# حذف الإعداد الافتراضي
 RUN rm -f /etc/nginx/sites-enabled/default
 
 # فتح المنفذ
