@@ -1,32 +1,32 @@
-# صورة جاهزة فيها Nginx + PHP-FPM
-FROM webdevops/php-nginx:8.2
+# ---------- مرحلة البناء ----------
+FROM composer:2 AS vendor
 
-# إعدادات أساسية
-ENV WEB_DOCUMENT_ROOT=/app/public
 WORKDIR /app
 
-# حزم لازمة للبناء
-RUN apt-get update && apt-get install -y \
-    git unzip curl gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
-
-# تثبيت Composer
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-
-# نسخ الملفات
-COPY . /app
-
-# تثبيت PHP deps
+# انسخ ملفات Laravel فقط
+COPY composer.json composer.lock ./
 RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
 
-# بناء الواجهات (إن وجدت)
-RUN [ -f package.json ] && npm ci && npm run build || true
+# ---------- مرحلة التطبيق ----------
+FROM php:8.2-fpm-alpine
 
-# صلاحيات وتوليف لارافيل
-RUN chown -R application:application /app/storage /app/bootstrap/cache \
- && php artisan storage:link || true
+# تثبيت الحزم اللازمة
+RUN apk add --no-cache bash git curl zip unzip libpng-dev libjpeg-turbo-dev libwebp-dev libzip-dev oniguruma-dev postgresql-dev icu-dev \
+    && docker-php-ext-configure gd --with-jpeg --with-webp \
+    && docker-php-ext-install pdo pdo_pgsql mbstring exif pcntl bcmath gd zip intl
 
-EXPOSE 80
-CMD ["supervisord"]
+WORKDIR /var/www/html
+
+# نسخ ملفات المشروع
+COPY . .
+
+# نسخ vendor من مرحلة البناء
+COPY --from=vendor /app/vendor ./vendor
+
+# إعدادات Laravel
+RUN php artisan storage:link || true
+
+EXPOSE 9000
+
+CMD ["php-fpm"]
+
