@@ -1,44 +1,34 @@
-##############################################
-# 🧠 Dockerfile for Atmen AI (Laravel / Wave)
-# PHP 8.2 + Composer + PostgreSQL + Coolify
-##############################################
-
-# ---------- مرحلة البناء (Composer) ----------
+# ---------- مرحلة بناء الاعتمادات ----------
 FROM composer:2 AS vendor
-
 WORKDIR /app
 
-# تثبيت الامتدادات المطلوبة في بيئة Alpine الخاصة بـ Composer
-RUN apk add --no-cache bash git curl zip unzip libpng-dev libjpeg-turbo-dev libwebp-dev libzip-dev icu-dev \
-    && docker-php-ext-configure gd --with-jpeg --with-webp \
-    && docker-php-ext-install gd exif intl
-
-# نسخ ملفات Laravel
+# انسخ ملفات composer فقط لتثبيت الاعتمادات
 COPY composer.json ./
+RUN composer install --no-dev --prefer-dist --no-interaction --ignore-platform-reqs
 
-# تثبيت الاعتمادات بدون composer.lock (تحديث آمن)
-RUN composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader --ignore-platform-reqs
-
-# ---------- مرحلة التشغيل (PHP-FPM) ----------
+# ---------- مرحلة التطبيق (PHP-FPM) ----------
 FROM php:8.2-fpm-alpine
 
-# تثبيت مكتبات النظام والامتدادات المطلوبة للتطبيق
-RUN apk add --no-cache bash git curl zip unzip libpng-dev libjpeg-turbo-dev libwebp-dev libzip-dev oniguruma-dev postgresql-dev icu-dev \
+# تثبيت المتطلبات الأساسية وامتدادات PHP
+RUN apk add --no-cache \
+    bash git curl zip unzip \
+    libpng-dev libjpeg-turbo-dev libwebp-dev libzip-dev oniguruma-dev \
+    postgresql-dev icu-dev icu-libs libxml2-dev \
     && docker-php-ext-configure gd --with-jpeg --with-webp \
-    && docker-php-ext-install pdo pdo_pgsql mbstring exif pcntl bcmath gd zip intl
+    && docker-php-ext-install \
+        pdo pdo_pgsql mbstring exif pcntl bcmath gd zip intl \
+    && rm -rf /var/cache/apk/*
 
+# نسخ ملفات المشروع من مجلد wave
 WORKDIR /var/www/html
+COPY wave/ .
 
-# نسخ المشروع
-COPY . .
-
-# نسخ vendor من مرحلة البناء
+# نسخ الاعتمادات المثبتة من مرحلة vendor
 COPY --from=vendor /app/vendor ./vendor
 
-# إعداد التخزين (اختياري)
-RUN php artisan storage:link || true
+# ضبط الصلاحيات
+RUN chmod -R 775 storage bootstrap/cache
 
+# إعداد نقطة الدخول
 EXPOSE 9000
-
 CMD ["php-fpm"]
-
